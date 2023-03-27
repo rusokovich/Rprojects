@@ -1,0 +1,180 @@
+library(httr)
+library(jsonlite)
+library(dplyr)
+library(tidyr)
+library(data.table)
+library(tibble)
+
+# These are the authentication parameters 
+endpoint <- "https://sendwave.cloud.agyletime.io/api/authority/token" # nolint
+identifier <- 'user'
+secret <- 'encrypted_password'
+
+# where to get the Bearer Key
+
+response <- POST(endpoint, config = authenticate(identifier , secret))
+
+
+# Parse the response to extract the bearer token
+
+#print(content(response)) # extra check 
+bearer_token=content(response)$data$accessToken
+
+
+# ============== Data Frames ====================
+
+# ----- Interaction with the Details of each agent ---- 
+
+api.value <-"/organisation/users/"
+url<-"https://api-us.cloud.agyletime.io"
+res <- GET( 
+  url = paste0(url,api.value), 	
+  add_headers(Authorization = paste0("Bearer ", bearer_token)))
+
+
+# res[["status_code"]] # RUN THis in case of errors 
+
+# --- Here we transformations
+myparsed.content<-content(res, 'text')
+json.content<-fromJSON(myparsed.content)
+df2<- json.content$data
+
+# View(activity_df2)
+
+# ------ Org list ----- 
+
+url<-"https://sendwave.cloud.agyletime.io/api"
+api.value <-"/organisation/users/"
+res <- GET( 
+  url = paste0(url,api.value), 	
+  add_headers(Authorization = paste0("Bearer ", bearer_token)))
+
+# res[["status_code"]]
+
+myparsed.content<-content(res, 'text')
+json.content<-fromJSON(myparsed.content)
+df3<- json.content$data
+
+# View(activity_df3)
+
+# ---- Shift Templates --- 
+url<-"https://sendwave.cloud.agyletime.io/api"
+api.value <-"/schedule/configuration/shiftTemplates/?userId=271"
+res <- GET( 
+  url = paste0(url,api.value), 	
+  add_headers(Authorization = paste0("Bearer ", bearer_token)))
+
+# res[["status_code"]]
+
+myparsed.content<-content(res, 'text')
+json.content<-fromJSON(myparsed.content)
+df4<- json.content$data
+
+# View(activity_df4)
+
+# ---- Transformations for df3 ---- 
+
+# df3 contains general information about the agents 
+
+# Expand the roles in the 
+for (i in 1:length(df3$roles)) {
+  df3[i,c("roles")]<-paste(df3$roles[[i]]$name, collapse=",")
+}
+
+# Expand the country
+for (i in 1:length(df3$tags)) {
+  df3[i,c("tags")]<-  paste(df3[[16]][[i]], collapse=",")
+}
+
+# Extra transformations
+# Proper All Names 
+# https://stackoverflow.com/questions/24956546/capitalizing-letters-r-equivalent-of-excel-proper-function
+
+df3$description<- gsub("(?<=\\b)([a-z])", "\\U\\1", tolower(df3$description), perl=TRUE) 
+
+# transform to dates 
+df3$startAt<-as.Date(df3$startAt) 
+
+# df3$updatedAt<-as.POSIXct(df3$updatedAt,tz="UTC") Just in case
+
+
+# SELECTION of needed columns
+df3<-df3 %>% select(id,description,email,timezone,teamName,roles,tags,startAt)
+
+
+# --- Transformation for df2 -----
+
+# df2 contains more details information about the agents profiles
+
+
+# Here we have the process of rectanguling the json formatted information 
+# to a data frame with the required information. 
+# df_test is where I store this information
+
+df_test<-df2 %>% 
+  unnest_wider(c(contract)) %>% 
+  select(id,employmentCategory,leaveConfiguration) %>% 
+  unnest_wider(c(leaveConfiguration)) %>%
+  select(id,employmentCategory,calendar) %>%
+  unnest_wider(calendar,names_sep = "_") %>%
+  select(-c(calendar_id))
+
+# glimpse(df_test) just if you want to check the hierarchy 
+
+
+#df_test$name<-gsub('[[:digit:]]+', '', df_test$name)
+#df_test %>% separate(name, into = c(paste0("x", 1:100)))
+
+# ----- Transformations for df4 ---- 
+
+# df4 contains the information about the schedules, both individually and as a group
+# her I dont rectangle but extract the information using loops
+
+# length(activity_df4$users) amount of data
+
+# dt will be the table that stores the information contained in the list of 
+# dataframes that is in column users ansd later on I add the name of the template
+# since is distributed by each row 
+
+dt<-data.frame()
+
+for (i in 1:length(df4$users)) {
+  df<-as.data.frame(df4[[14]][[i]])
+  try(df$shift.template<-df4[i,c("name")],silent = TRUE)
+  dt<-union_all(dt,df)
+}
+
+# removing the email as it seems is incomplete
+dt<-dt%>%select(-c(email))
+
+# here we do the merging, keep in mind df3 contains the general information about the agents
+# so left joining the information missing agents 
+
+final.data.frame<-left_join(df3, dt, by = "id")
+final.data.frame<-left_join(final.data.frame, df_test, by = "id")
+
+
+# we add the date in which we run this for future analysis
+final.data.frame$startAt<-format(final.data.frame$startAt,"%m/%d/%Y")
+final.data.frame$loadedAt<-format(Sys.Date(),"%m/%d/%Y")
+final.data.frame[is.na(final.data.frame)] <- ""
+
+# changing column names 
+# Source:https://www.geeksforgeeks.org/change-column-name-of-a-given-dataframe-in-r/
+colnames(final.data.frame)[which(names(final.data.frame) == "id")] <- "playvox_id"
+colnames(final.data.frame)[which(names(final.data.frame) == "timezone")] <- "playvox_timezone"
+colnames(final.data.frame)[which(names(final.data.frame) == "tags")] <- "playvox_country"
+colnames(final.data.frame)[which(names(final.data.frame) == "calendar_name")] <- "timeoff_calendar"
+colnames(final.data.frame)[which(names(final.data.frame) == "description")] <- "full_name"
+
+# A necesary step prior to write.csv
+# https://stackoverflow.com/questions/24829027/unimplemented-type-list-when-trying-to-write-table
+final.data.frame <- apply(final.data.frame,2,as.character)
+
+# Name format of the file Headcountmmddyyyy.csv if you run this twice it overwrites the info
+
+path<-paste0("/Users/fkkarpuk/Library/CloudStorage/GoogleDrive-felipe.corrales@sendwave.com/Shared drives/General Drive/Sendwave (New Workspace)/WFM/HistoricalHeadCount/Headcount"
+             ,format(Sys.Date(),"%m%d%Y"),".csv")
+
+# publishing the dataset
+write.csv(final.data.frame,path, row.names = FALSE)
