@@ -3,7 +3,7 @@ rm(list=ls())
 
 # cargar los datos 
 
-setwd('/Users/fkkarpuk/Downloads/')
+setwd('your folder site')
 
 # subir los datos, 
 
