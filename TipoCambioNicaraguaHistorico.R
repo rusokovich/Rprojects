@@ -66,12 +66,12 @@ tabla_tipo_cambio<-na.omit(tabla_tipo_cambio)
 
 # establecer el area de trabajo
 
-setwd('/Users/fkkarpuk/Desktop/TipoCambioNicaragua/HistoricoTipoCambio')
+setwd('path')
 
 
 
 # ---- Automatizacion de la extraccion ----- 
-
+# https://www.youtube.com/watch?v=Dkm1d4uMp34 mayor referencia de RSelenium
 
 remote.driver <- rsDriver(browser="chrome"
                           ,chromever = "119.0.6045.105"
@@ -301,6 +301,123 @@ colnames(tabla_tipo_cambio_nicaragua)<-c("fecha","TipoCambio")
 print("Fin de la primera iteracion")
 
 } 
+  else if (df_urls[i,1] =="1988.pdf") {
+    #url <- "https://www.bcn.gob.ni/IRR/tipo_cambio_mensual/cambio_historico/3193/1988.pdf"
+    
+    url<- df_urls[i,2]
+    
+    #Locate the areas
+    #locate_areas(url)
+    
+    
+    tabla_tipo_cambio<-extract_tables(url,guess = FALSE
+                                      ,area = list(c(163.3037,106.7701,484.9342,724.5927))
+    ) %>% 
+      as.data.frame()%>% slice(1:(n() - 2)) %>% select(-X2,-X3,-X12) %>% 
+      mutate(X1 = str_replace_all(X1, "1\\)", ""))  %>%
+      mutate(X1 = str_squish(X1)) %>%
+      separate(X1, into = c("X1","X2","X3"), sep = " ") %>% 
+      rename(
+        dia = X1, enero = X2, febrero = X3, marzo = X4,
+        abril = X5,mayo = X6, junio = X7, julio = X8, agosto = X9,
+        septiembre = X10, octubre = X11, noviembre = X13,
+        diciembre = X14, promedio = X15
+      )
+    
+    
+    # remover la columna promedio
+    tabla_tipo_cambio<-tabla_tipo_cambio[,-which(names(tabla_tipo_cambio) == "promedio")]
+    
+    # crear la tabla inversa
+    tabla_tipo_cambio<-pivot_longer(tabla_tipo_cambio, cols =-dia
+                                    ,names_to = "mes",values_to = "valor")
+    
+    #tabla_tipo_cambio$valor<- gsub(",", "", tabla_tipo_cambio$valor)
+    
+    tabla_tipo_cambio <- tabla_tipo_cambio %>%
+      mutate(ano = gsub("\\D", "",sub(".*/([^/]+)$", "\\1", url))) %>%
+      left_join(tabla_meses, by=c("mes"="NombreMes"))
+    
+    tabla_tipo_cambio$fechastring <- paste(tabla_tipo_cambio$dia
+                                           ,as.character(tabla_tipo_cambio$NumeroMes)
+                                           ,tabla_tipo_cambio$ano,sep="-")
+    
+    tabla_tipo_cambio$fecha <- as.Date(tabla_tipo_cambio$fechastring, format = "%d-%m-%Y")
+    
+    
+    tabla_tipo_cambio<- tabla_tipo_cambio %>%
+      select(-c(dia,mes,ano,NumeroMes,fechastring)) %>%
+      select(fecha,valor) %>%  rename(TipoCambio = valor)
+    
+    tabla_tipo_cambio$TipoCambio<-as.numeric(tabla_tipo_cambio$TipoCambio)
+    
+    tabla_tipo_cambio<-na.omit(tabla_tipo_cambio)
+    
+    
+    #   Enero 1 a Febrero 14 de 1991: 70
+    
+    
+    tabla_tipo_cambio$TipoCambio[tabla_tipo_cambio$fecha >= as.Date("1988-01-01") & tabla_tipo_cambio$fecha <= as.Date("1988-02-14")] <- 70
+    
+    
+    tabla_tipo_cambio_nicaragua <- union(tabla_tipo_cambio_nicaragua, tabla_tipo_cambio)
+  }
+  
+  
+  else if (df_urls[i,1] == "1989.pdf") {
+    #url <- "https://www.bcn.gob.ni/IRR/tipo_cambio_mensual/cambio_historico/3193/1989.pdf"
+    
+    url<- df_urls[i,2]
+    
+    #Locate the areas
+    #locate_areas(url)
+    
+    
+    tabla_tipo_cambio<-extract_tables(url,guess = FALSE
+                                      ,area = list(c(163.3037,106.7701,484.9342,724.5927))
+    ) %>% 
+      as.data.frame()  %>% rename(
+        X14 = X13
+      ) %>% separate(X12, into = c("X12","X13"), sep = " ") %>% 
+      rename(
+        dia = X1, enero = X2, febrero = X3, marzo = X4,
+        abril = X5,mayo = X6, junio = X7, julio = X8, agosto = X9,
+        septiembre = X10, octubre = X11, noviembre = X12,
+        diciembre = X13, promedio = X14
+      ) %>% slice(-1)
+    
+    
+    # remover la columna promedio
+    tabla_tipo_cambio<-tabla_tipo_cambio[,-which(names(tabla_tipo_cambio) == "promedio")]
+    
+    # crear la tabla inversa
+    tabla_tipo_cambio<-pivot_longer(tabla_tipo_cambio, cols =-dia
+                                    ,names_to = "mes",values_to = "valor")
+    
+    tabla_tipo_cambio$valor<- gsub(",", "", tabla_tipo_cambio$valor)
+    
+    tabla_tipo_cambio <- tabla_tipo_cambio %>%
+      mutate(ano = gsub("\\D", "",sub(".*/([^/]+)$", "\\1", url))) %>%
+      left_join(tabla_meses, by=c("mes"="NombreMes"))
+    
+    tabla_tipo_cambio$fechastring <- paste(tabla_tipo_cambio$dia
+                                           ,as.character(tabla_tipo_cambio$NumeroMes)
+                                           ,tabla_tipo_cambio$ano,sep="-")
+    
+    tabla_tipo_cambio$fecha <- as.Date(tabla_tipo_cambio$fechastring, format = "%d-%m-%Y")
+    
+    
+    tabla_tipo_cambio<- tabla_tipo_cambio %>%
+      select(-c(dia,mes,ano,NumeroMes,fechastring)) %>%
+      select(fecha,valor) %>%  rename(TipoCambio = valor)
+    
+    tabla_tipo_cambio$TipoCambio<-as.numeric(tabla_tipo_cambio$TipoCambio)
+    
+    tabla_tipo_cambio<-na.omit(tabla_tipo_cambio)
+    
+    tabla_tipo_cambio_nicaragua <- union(tabla_tipo_cambio_nicaragua, tabla_tipo_cambio)
+  }
+  
   else if (df_urls[i,1] == "1990.pdf") { 
     
     # 1990 
@@ -1490,12 +1607,18 @@ print("Fin de la primera iteracion")
 # quitar los NAs
 tabla_tipo_cambio_nicaragua<-na.omit(tabla_tipo_cambio_nicaragua)
 
+tabla_tipo_cambio_nicaragua <- tabla_tipo_cambio_nicaragua[order(tabla_tipo_cambio_nicaragua$fecha), ]
 
+
+# Prueba
+plot(tabla_tipo_cambio_nicaragua[tabla_tipo_cambio_nicaragua$fecha > as.Date("1992-01-01"), ])
+
+write.csv(tabla_tipo_cambio_nicaragua, "path/TipoCambioNicaraguaHistorico.csv"
+          , row.names=FALSE)
  
 
- 
- 
-
+unique(tabla_tipo_cambio_nicaragua$fecha)
+remote.driver$server$stop()
 
 
 
