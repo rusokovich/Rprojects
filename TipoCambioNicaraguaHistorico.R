@@ -1604,11 +1604,18 @@ print("Fin de la primera iteracion")
   
 }
 
+# tipo de cambio 2024 es fijo establecido en 36.62 por el BCN
+
+tipo_cambio_nicaragua_2024<-data.frame(fecha = generate_date_sequences("2024"), TipoCambio = 36.62)
+tipo_cambio_nicaragua_2024$fecha<-as.Date(tipo_cambio_nicaragua_2024$fecha)
+
 # quitar los NAs
 tabla_tipo_cambio_nicaragua<-na.omit(tabla_tipo_cambio_nicaragua)
 
 tabla_tipo_cambio_nicaragua <- tabla_tipo_cambio_nicaragua[order(tabla_tipo_cambio_nicaragua$fecha), ]
 
+
+tabla_tipo_cambio_nicaragua <- union(tabla_tipo_cambio_nicaragua, tipo_cambio_nicaragua_2024)
 
 # Prueba
 plot(tabla_tipo_cambio_nicaragua[tabla_tipo_cambio_nicaragua$fecha > as.Date("1992-01-01"), ])
